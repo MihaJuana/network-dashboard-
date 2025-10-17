@@ -1,0 +1,11 @@
+- name: Ping target host
+  hosts: targets
+  gather_facts: no
+  tasks:
+    - name: Ping the target
+      ansible.builtin.shell: "ping -c 4 {{ target }}"
+      register: ping_output
+
+    - name: Show ping result
+      debug:
+        var: ping_output.stdout

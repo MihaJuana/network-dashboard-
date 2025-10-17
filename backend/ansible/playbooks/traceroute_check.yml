@@ -1,0 +1,11 @@
+- name: Traceroute to target host
+  hosts: targets
+  gather_facts: no
+  tasks:
+    - name: Run traceroute
+      ansible.builtin.shell: "traceroute {{ target }}"
+      register: trace_output
+
+    - name: Show traceroute result
+      debug:
+        var: trace_output.stdout
