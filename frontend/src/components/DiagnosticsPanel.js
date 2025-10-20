@@ -26,6 +26,7 @@ const DiagnosticsPanel = () => {
   return (
     <div style={{ padding: '20px' }}>
       <h2>Network Diagnostics</h2>
+      <h1>Hello this add from the client page</h1>
       <input
         type="text"
         placeholder="Enter target IP or hostname"
