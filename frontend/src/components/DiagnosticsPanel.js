@@ -10,7 +10,7 @@ const DiagnosticsPanel = () => {
     setLoading(true);
     setOutput('');
     try {
-      const response = await axios.post('http://localhost:5000/run-playbook', {
+      const response = await axios.post('/run-playbook', {
         target,
         playbook
       });
