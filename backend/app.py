@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import logging
 
+
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
