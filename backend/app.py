@@ -1,6 +1,6 @@
-from flask import send_from_directory
+import os                      # ✅ missing import
 import mysql.connector
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import logging
 
@@ -8,19 +8,12 @@ app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-
-@app.route('/')
-@app.route('/<path:path>')
-def serve_react(path=None):
-    build_dir = os.path.join(os.path.dirname(__file__), '../frontend/build')
-    if path and os.path.exists(os.path.join(build_dir, path)):
-        return send_from_directory(build_dir, path)
-    return send_from_directory(build_dir, 'index.html')
+# --- DB helpers ---
 
 
 def get_db():
     return mysql.connector.connect(
-        host="127.0.0.1",  # Force TCP connection instead of socket
+        host="127.0.0.1",
         port=3306,
         user="flaskuser",
         password="Temp123!@#",
@@ -31,15 +24,12 @@ def get_db():
 def init_db():
     db = get_db()
     cursor = db.cursor()
-
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sites (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
         location VARCHAR(255),
         floor VARCHAR(50)
-    )
-    """)
-
+    )""")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS racks (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -47,9 +37,7 @@ def init_db():
         name VARCHAR(255),
         size INT,
         FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-    )
-    """)
-
+    )""")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS equipment (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,12 +47,23 @@ def init_db():
         text VARCHAR(255),
         u_size INT,
         FOREIGN KEY (rack_id) REFERENCES racks(id) ON DELETE CASCADE
-    )
-    """)
-
+    )""")
     db.commit()
     cursor.close()
     db.close()
+
+# 👉 Ensure schema exists when running under Gunicorn/WSGI too
+
+
+@app.before_first_request
+def _ensure_schema():
+    try:
+        init_db()
+        app.logger.info("DB schema ensured.")
+    except Exception as e:
+        app.logger.exception(f"DB init failed: {e}")
+
+# --- API routes ---
 
 
 @app.route("/save", methods=["POST"])
@@ -72,11 +71,8 @@ def save_layout():
     import traceback
     conn = None
     cursor = None
-
     try:
         data = request.get_json()
-        print("📥 Received /save data:", data)  # Debugging log
-
         sites = data.get("sites", [])
         rackData = data.get("rackData", {})
         rackNames = data.get("rackNames", {})
@@ -86,8 +82,6 @@ def save_layout():
         conn.autocommit = False
 
         site_map = {}
-
-        # --- Handle Sites ---
         for site in sites:
             location = site.get("location", "")
             floor = site.get("floor", "")
@@ -115,7 +109,6 @@ def save_layout():
                 )
                 site_map[str(site_id)] = cursor.lastrowid
 
-        # --- Handle Racks and Equipment ---
         for site_id, racks in rackData.items():
             db_site_id = site_map.get(str(site_id))
             if not db_site_id:
@@ -124,26 +117,19 @@ def save_layout():
             for rack_id, rack in racks.items():
                 rack_name = rackNames.get(rack_id, f"Rack_{rack_id}")
                 rack_size = rack.get("size", 42)
-
-                # Insert or update rack
                 cursor.execute(
                     "INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)",
                     (db_site_id, rack_name, rack_size),
                 )
                 db_rack_id = cursor.lastrowid
 
-                # Delete old equipment for this rack (to replace)
                 cursor.execute(
                     "DELETE FROM equipment WHERE rack_id = %s", (db_rack_id,))
-
-                # Insert equipment
                 for slot_index, slot in enumerate(rack.get("slots", [])):
                     if slot and not slot.get("occupied"):
                         cursor.execute(
-                            """
-                            INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
-                            VALUES (%s, %s, %s, %s, %s)
-                            """,
+                            """INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
+                               VALUES (%s, %s, %s, %s, %s)""",
                             (
                                 db_rack_id,
                                 slot_index + 1,
@@ -154,16 +140,13 @@ def save_layout():
                         )
 
         conn.commit()
-        print("✅ Save successful — data committed to DB")
         return jsonify({"message": "Save successful ✅"}), 200
 
     except Exception as e:
         if conn:
             conn.rollback()
-        print("❌ Save failed:", str(e))
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
     finally:
         if cursor:
             cursor.close()
@@ -178,14 +161,12 @@ def load_layout():
     try:
         cursor.execute("SELECT * FROM sites")
         sites = cursor.fetchall()
-
         rackData = {}
         rackNames = {}
 
         for site in sites:
             site_id = site["id"]
             rackData[site_id] = {}
-
             cursor.execute("SELECT * FROM racks WHERE site_id=%s", (site_id,))
             racks = cursor.fetchall()
 
@@ -196,7 +177,9 @@ def load_layout():
                 slots = [None] * size
 
                 cursor.execute(
-                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (rack_id,))
+                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (
+                        rack_id,)
+                )
                 equipment_list = cursor.fetchall()
 
                 max_slot_index = 0
@@ -212,25 +195,19 @@ def load_layout():
                         "type": eq["type"],
                         "text": eq["text"],
                         "u": eq["u_size"],
-                        "occupied": False
+                        "occupied": False,
                     }
                     slots[eq["slot_index"]] = eq_obj
                     for i in range(1, eq["u_size"]):
                         if eq["slot_index"] + i < len(slots):
-                            slots[eq["slot_index"] + i] = {
-                                **eq_obj,
-                                "occupied": True
-                            }
+                            slots[eq["slot_index"] +
+                                  i] = {**eq_obj, "occupied": True}
 
                 rackData[site_id][rack_id] = {"size": size, "slots": slots}
 
-        return jsonify({
-            "sites": sites,
-            "rackData": rackData,
-            "rackNames": rackNames
-        })
+        return jsonify({"sites": sites, "rackData": rackData, "rackNames": rackNames})
     except Exception as e:
-        logging.error(f"Load layout error: {str(e)}")
+        app.logger.exception(f"Load layout error: {e}")
         return jsonify({"error": "Failed to load layout"}), 500
     finally:
         cursor.close()
@@ -284,7 +261,18 @@ def delete_equipment(eq_id):
         cursor.close()
         conn.close()
 
+# --- React SPA catch-all (keep last so it doesn’t confuse route matching) ---
+
+
+@app.route("/")
+@app.route("/<path:path>")
+def serve_react(path=None):
+    build_dir = os.path.join(os.path.dirname(__file__), "../frontend/build")
+    if path and os.path.exists(os.path.join(build_dir, path)):
+        return send_from_directory(build_dir, path)
+    return send_from_directory(build_dir, "index.html")
+
 
 if __name__ == "__main__":
-    init_db()
+    init_db()  # still OK for local dev runs
     app.run(host="0.0.0.0", port=5000, debug=True)
