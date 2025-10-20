@@ -10,7 +10,7 @@ const DiagnosticsPanel = () => {
     setLoading(true);
     setOutput('');
     try {
-      const response = await axios.post('/run-playbook', {
+      const response = await axios.post('http://10.7.4.101:5000/run-playbook', {
         target,
         playbook
       });
@@ -26,7 +26,7 @@ const DiagnosticsPanel = () => {
   return (
     <div style={{ padding: '20px' }}>
       <h2>Network Diagnostics</h2>
-      <h1>Hello this add from the client page</h1>
+
       <input
         type="text"
         placeholder="Enter target IP or hostname"
