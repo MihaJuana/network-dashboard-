@@ -25,8 +25,10 @@ const DiagnosticsPanel = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      <h2>Network Diagnostics</h2>
 
+      <h1>This is a current testing for push and pull from git to server</h1>
+
+      <h2>Network Diagnostics</h2>
       <input
         type="text"
         placeholder="Enter target IP or hostname"
