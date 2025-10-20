@@ -1,3 +1,4 @@
+from flask import send_from_directory
 import mysql.connector
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -6,6 +7,15 @@ import logging
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
+
+
+@app.route('/')
+@app.route('/<path:path>')
+def serve_react(path=None):
+    build_dir = os.path.join(os.path.dirname(__file__), '../frontend/build')
+    if path and os.path.exists(os.path.join(build_dir, path)):
+        return send_from_directory(build_dir, path)
+    return send_from_directory(build_dir, 'index.html')
 
 
 def get_db():
