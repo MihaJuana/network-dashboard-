@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const API_URL = "/api";
+// ✅ Fix this part
+const API_URL = process.env.REACT_APP_API_URL || "/api";
+
 
 export default function RackDiagramBuilder() {
     const [sites, setSites] = useState([]);
