@@ -202,22 +202,44 @@ export default function RackDiagramBuilder() {
 
             const payload = { sites, rackData: validRackData, rackNames };
             console.log("Payload sent:", payload);
+
             const res = await fetch(`${API_URL}/save`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
+
             const json = await res.json();
             if (!res.ok) {
                 alert("Save failed: " + (json.error || JSON.stringify(json)));
                 return;
             }
+
+            // ✅ Step 1: Replace fake IDs with real DB IDs
+            if (json.site_map) {
+                const idMap = json.site_map;
+                const updatedSites = sites.map((s) => ({
+                    ...s,
+                    id: idMap[s.id] || s.id,
+                }));
+
+                const updatedRackData = {};
+                Object.entries(rackData).forEach(([siteId, racks]) => {
+                    const newId = idMap[siteId] || siteId;
+                    updatedRackData[newId] = racks;
+                });
+
+                setSites(updatedSites);
+                setRackData(updatedRackData);
+            }
+
+            // ✅ Step 2: Clear and reload for consistency
             setSites([]);
             setRackData({});
             setRackNames({});
             await handleLoadData();
-            alert("Save successful ✅");
 
+            alert("Save successful ✅");
         } catch (err) {
             alert("Save error: " + err.message);
         }

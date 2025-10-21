@@ -202,7 +202,10 @@ def save_layout():
                         """, (db_rack_id, i + 1, slot["type"], slot["text"], slot["u"]))
 
         conn.commit()
-        return jsonify({"message": "Save successful ✅"}), 200
+        return jsonify({
+            "message": "Save successful ✅",
+            "site_map": site_map  # Send back new site_id mappings
+        }), 200
 
     except Exception as e:
         if conn:
