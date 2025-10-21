@@ -4,12 +4,11 @@ import mysql.connector
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-# --- Flask setup ---
 app = Flask(__name__, static_folder="../frontend/build", static_url_path="/")
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-# --- Database connection helper ---
+# --- Database helper ---
 
 
 def get_db():
@@ -21,7 +20,7 @@ def get_db():
         database="rackdb"
     )
 
-# --- Initialize database schema ---
+# --- Initialize database ---
 
 
 def init_db():
@@ -65,8 +64,8 @@ try:
 except Exception as e:
     app.logger.exception(f"❌ DB init failed: {e}")
 
-# --- API ROUTES ---
 
+# --- API ROUTES ---
 
 @app.route("/api/load-layout", methods=["GET"])
 def load_layout():
@@ -75,15 +74,13 @@ def load_layout():
     try:
         cursor.execute("SELECT * FROM sites")
         sites = cursor.fetchall()
-        rackData = {}
-        rackNames = {}
+        rackData, rackNames = {}, {}
 
         for site in sites:
             site_id = site["id"]
             rackData[site_id] = {}
             cursor.execute("SELECT * FROM racks WHERE site_id=%s", (site_id,))
             racks = cursor.fetchall()
-
             for rack in racks:
                 rack_id = rack["id"]
                 rackNames[str(rack_id)] = rack["name"]
@@ -91,12 +88,8 @@ def load_layout():
                 slots = [None] * size
 
                 cursor.execute(
-                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index",
-                    (rack_id,),
-                )
-                equipment_list = cursor.fetchall()
-
-                for eq in equipment_list:
+                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (rack_id,))
+                for eq in cursor.fetchall():
                     eq_obj = {
                         "type": eq["type"],
                         "text": eq["text"],
@@ -121,10 +114,17 @@ def load_layout():
         conn.close()
 
 
-@app.route("/api/save", methods=["POST"])
+# ✅ Allow OPTIONS for CORS preflight
+@app.route("/api/save", methods=["POST", "OPTIONS"])
+# ✅ Handle trailing slash
+@app.route("/api/save/", methods=["POST", "OPTIONS"])
 def save_layout():
+    if request.method == "OPTIONS":
+        return '', 204  # ✅ CORS preflight OK
+
+    conn = None
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
         sites = data.get("sites", [])
         rackData = data.get("rackData", {})
         rackNames = data.get("rackNames", {})
@@ -135,11 +135,9 @@ def save_layout():
 
         site_map = {}
         for site in sites:
-            location = site.get("location", "")
-            floor = site.get("floor", "")
             cursor.execute(
                 "INSERT INTO sites (location, floor) VALUES (%s, %s)",
-                (location, floor),
+                (site.get("location", ""), site.get("floor", ""))
             )
             site_map[str(site["id"])] = cursor.lastrowid
 
@@ -152,7 +150,7 @@ def save_layout():
                 size = rack.get("size", 42)
                 cursor.execute(
                     "INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)",
-                    (db_site_id, rack_name, size),
+                    (db_site_id, rack_name, size)
                 )
                 db_rack_id = cursor.lastrowid
 
@@ -162,7 +160,7 @@ def save_layout():
                             """INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
                                VALUES (%s, %s, %s, %s, %s)""",
                             (db_rack_id, i + 1,
-                             slot["type"], slot["text"], slot["u"]),
+                             slot["type"], slot["text"], slot["u"])
                         )
 
         conn.commit()
@@ -173,10 +171,8 @@ def save_layout():
         app.logger.exception(f"Save failed: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
-        conn.close()
-
-# Delete routes
+        if conn:
+            conn.close()
 
 
 @app.route("/api/delete/site/<int:site_id>", methods=["DELETE"])
@@ -209,24 +205,6 @@ def delete_rack(rack_id):
     finally:
         cursor.close()
         conn.close()
-
-
-@app.route("/api/delete/equipment/<int:eq_id>", methods=["DELETE"])
-def delete_equipment(eq_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM equipment WHERE id=%s", (eq_id,))
-        conn.commit()
-        return jsonify({"message": f"Equipment {eq_id} deleted"})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# React Catch-All
 
 
 @app.errorhandler(404)
