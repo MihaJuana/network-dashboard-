@@ -1,16 +1,16 @@
 import os
+import logging
 import mysql.connector
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import logging
 
+# --- Flask setup ---
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-# --- DB Helpers ---
 
-
+# --- Database connection helper ---
 def get_db():
     return mysql.connector.connect(
         host="127.0.0.1",
@@ -21,49 +21,53 @@ def get_db():
     )
 
 
+# --- Initialize database schema ---
 def init_db():
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sites (
-        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-        location VARCHAR(255),
-        floor VARCHAR(50)
-    )""")
+        CREATE TABLE IF NOT EXISTS sites (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            location VARCHAR(255),
+            floor VARCHAR(50)
+        )
+    """)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS racks (
-        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-        site_id BIGINT,
-        name VARCHAR(255),
-        size INT,
-        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
-    )""")
+        CREATE TABLE IF NOT EXISTS racks (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            site_id BIGINT,
+            name VARCHAR(255),
+            size INT,
+            FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+        )
+    """)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS equipment (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        rack_id BIGINT,
-        slot_index INT,
-        type VARCHAR(50),
-        text VARCHAR(255),
-        u_size INT,
-        FOREIGN KEY (rack_id) REFERENCES racks(id) ON DELETE CASCADE
-    )""")
+        CREATE TABLE IF NOT EXISTS equipment (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            rack_id BIGINT,
+            slot_index INT,
+            type VARCHAR(50),
+            text VARCHAR(255),
+            u_size INT,
+            FOREIGN KEY (rack_id) REFERENCES racks(id) ON DELETE CASCADE
+        )
+    """)
     db.commit()
     cursor.close()
     db.close()
-    app.logger.info("✅ Database schema ensured.")
 
 
-# ✅ Call init_db() once on import (safe in Gunicorn + Flask 3.x)
+# ✅ Ensure tables exist when Gunicorn starts
 try:
     init_db()
+    app.logger.info("✅ Database schema ensured at startup")
 except Exception as e:
-    app.logger.exception(f"❌ Database initialization failed: {e}")
-
-# --- API Routes ---
+    app.logger.exception(f"❌ DB init failed: {e}")
 
 
-@app.route("/save", methods=["POST"])
+# --- API ROUTES (now all start with /api) ---
+
+@app.route("/api/save", methods=["POST"])
 def save_layout():
     import traceback
     conn = None
@@ -79,6 +83,7 @@ def save_layout():
         conn.autocommit = False
 
         site_map = {}
+        # --- Sites ---
         for site in sites:
             location = site.get("location", "")
             floor = site.get("floor", "")
@@ -106,6 +111,7 @@ def save_layout():
                 )
                 site_map[str(site_id)] = cursor.lastrowid
 
+        # --- Racks + Equipment ---
         for site_id, racks in rackData.items():
             db_site_id = site_map.get(str(site_id))
             if not db_site_id:
@@ -151,7 +157,7 @@ def save_layout():
             conn.close()
 
 
-@app.route("/load-layout", methods=["GET"])
+@app.route("/api/load-layout", methods=["GET"])
 def load_layout():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -174,8 +180,8 @@ def load_layout():
                 slots = [None] * size
 
                 cursor.execute(
-                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index",
-                    (rack_id,),
+                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (
+                        rack_id,)
                 )
                 equipment_list = cursor.fetchall()
 
@@ -211,7 +217,7 @@ def load_layout():
         conn.close()
 
 
-@app.route("/delete/site/<int:site_id>", methods=["DELETE"])
+@app.route("/api/delete/site/<int:site_id>", methods=["DELETE"])
 def delete_site(site_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -227,7 +233,7 @@ def delete_site(site_id):
         conn.close()
 
 
-@app.route("/delete/rack/<int:rack_id>", methods=["DELETE"])
+@app.route("/api/delete/rack/<int:rack_id>", methods=["DELETE"])
 def delete_rack(rack_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -243,7 +249,7 @@ def delete_rack(rack_id):
         conn.close()
 
 
-@app.route("/delete/equipment/<int:eq_id>", methods=["DELETE"])
+@app.route("/api/delete/equipment/<int:eq_id>", methods=["DELETE"])
 def delete_equipment(eq_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -259,9 +265,7 @@ def delete_equipment(eq_id):
         conn.close()
 
 
-# --- React SPA catch-all ---
-
-
+# --- React SPA Catch-All ---
 @app.route("/")
 @app.route("/<path:path>")
 def serve_react(path=None):
@@ -271,6 +275,7 @@ def serve_react(path=None):
     return send_from_directory(build_dir, "index.html")
 
 
+# --- Entry Point ---
 if __name__ == "__main__":
-    # Only for local debugging — Gunicorn will ignore this
+    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
