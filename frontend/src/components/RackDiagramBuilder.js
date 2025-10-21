@@ -18,7 +18,7 @@ export default function RackDiagramBuilder() {
         handleLoadData();
     }, []);
 
-    const equipmentLibrary = [
+    const equipmentLibrary = [cd
         { type: "server", text: "🖥️ Server (1U)", u: 1 },
         { type: "switch", text: "🔀 Switch (1U)", u: 1 },
         { type: "router", text: "🌐 Router (2U)", u: 2 },
