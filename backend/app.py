@@ -1,15 +1,14 @@
-import os                      # ✅ missing import
+import os
 import mysql.connector
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import logging
 
-
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-# --- DB helpers ---
+# --- DB Helpers ---
 
 
 def get_db():
@@ -52,19 +51,16 @@ def init_db():
     db.commit()
     cursor.close()
     db.close()
+    app.logger.info("✅ Database schema ensured.")
 
-# 👉 Ensure schema exists when running under Gunicorn/WSGI too
 
+# ✅ Call init_db() once on import (safe in Gunicorn + Flask 3.x)
+try:
+    init_db()
+except Exception as e:
+    app.logger.exception(f"❌ Database initialization failed: {e}")
 
-@app.before_first_request
-def _ensure_schema():
-    try:
-        init_db()
-        app.logger.info("DB schema ensured.")
-    except Exception as e:
-        app.logger.exception(f"DB init failed: {e}")
-
-# --- API routes ---
+# --- API Routes ---
 
 
 @app.route("/save", methods=["POST"])
@@ -178,8 +174,8 @@ def load_layout():
                 slots = [None] * size
 
                 cursor.execute(
-                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (
-                        rack_id,)
+                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index",
+                    (rack_id,),
                 )
                 equipment_list = cursor.fetchall()
 
@@ -262,7 +258,8 @@ def delete_equipment(eq_id):
         cursor.close()
         conn.close()
 
-# --- React SPA catch-all (keep last so it doesn’t confuse route matching) ---
+
+# --- React SPA catch-all ---
 
 
 @app.route("/")
@@ -275,5 +272,5 @@ def serve_react(path=None):
 
 
 if __name__ == "__main__":
-    init_db()  # still OK for local dev runs
+    # Only for local debugging — Gunicorn will ignore this
     app.run(host="0.0.0.0", port=5000, debug=True)
