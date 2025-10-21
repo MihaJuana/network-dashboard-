@@ -28,7 +28,7 @@ def init_db():
     cursor = db.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sites (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            id BIGINT PRIMARY KEY,
             location VARCHAR(255),
             floor VARCHAR(50)
         )
@@ -81,6 +81,7 @@ def load_layout():
             rackData[site_id] = {}
             cursor.execute("SELECT * FROM racks WHERE site_id=%s", (site_id,))
             racks = cursor.fetchall()
+
             for rack in racks:
                 rack_id = rack["id"]
                 rackNames[str(rack_id)] = rack["name"]
@@ -114,13 +115,12 @@ def load_layout():
         conn.close()
 
 
-# ✅ Allow OPTIONS for CORS preflight
+# ✅ Save layout (UPSERT — prevents duplicates)
 @app.route("/api/save", methods=["POST", "OPTIONS"])
-# ✅ Handle trailing slash
 @app.route("/api/save/", methods=["POST", "OPTIONS"])
 def save_layout():
     if request.method == "OPTIONS":
-        return '', 204  # ✅ CORS preflight OK
+        return '', 204  # CORS preflight OK
 
     conn = None
     try:
@@ -134,37 +134,68 @@ def save_layout():
         conn.autocommit = False
 
         site_map = {}
-        for site in sites:
-            cursor.execute(
-                "INSERT INTO sites (location, floor) VALUES (%s, %s)",
-                (site.get("location", ""), site.get("floor", ""))
-            )
-            site_map[str(site["id"])] = cursor.lastrowid
 
+        # --- UPSERT for sites ---
+        for site in sites:
+            site_id = site.get("id")
+            location = site.get("location", "")
+            floor = site.get("floor", "")
+
+            cursor.execute("SELECT id FROM sites WHERE id=%s", (site_id,))
+            existing = cursor.fetchone()
+
+            if existing:
+                cursor.execute("""
+                    UPDATE sites SET location=%s, floor=%s WHERE id=%s
+                """, (location, floor, site_id))
+                site_map[str(site_id)] = site_id
+            else:
+                cursor.execute("""
+                    INSERT INTO sites (id, location, floor) VALUES (%s, %s, %s)
+                """, (site_id, location, floor))
+                site_map[str(site_id)] = site_id
+
+        # --- UPSERT for racks + equipment ---
         for site_id, racks in rackData.items():
             db_site_id = site_map.get(str(site_id))
             if not db_site_id:
                 continue
+
             for rack_id, rack in racks.items():
                 rack_name = rackNames.get(rack_id, f"Rack_{rack_id}")
                 size = rack.get("size", 42)
-                cursor.execute(
-                    "INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)",
-                    (db_site_id, rack_name, size)
-                )
-                db_rack_id = cursor.lastrowid
 
+                # Check if rack exists
+                cursor.execute("""
+                    SELECT id FROM racks WHERE site_id=%s AND name=%s
+                """, (db_site_id, rack_name))
+                existing = cursor.fetchone()
+
+                if existing:
+                    db_rack_id = existing[0]
+                    cursor.execute("""
+                        UPDATE racks SET size=%s WHERE id=%s
+                    """, (size, db_rack_id))
+                    # Clear existing equipment to refresh layout
+                    cursor.execute(
+                        "DELETE FROM equipment WHERE rack_id=%s", (db_rack_id,))
+                else:
+                    cursor.execute("""
+                        INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)
+                    """, (db_site_id, rack_name, size))
+                    db_rack_id = cursor.lastrowid
+
+                # Insert all equipment for this rack
                 for i, slot in enumerate(rack.get("slots", [])):
                     if slot and not slot.get("occupied"):
-                        cursor.execute(
-                            """INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
-                               VALUES (%s, %s, %s, %s, %s)""",
-                            (db_rack_id, i + 1,
-                             slot["type"], slot["text"], slot["u"])
-                        )
+                        cursor.execute("""
+                            INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (db_rack_id, i + 1, slot["type"], slot["text"], slot["u"]))
 
         conn.commit()
         return jsonify({"message": "Save successful ✅"}), 200
+
     except Exception as e:
         if conn:
             conn.rollback()
@@ -175,6 +206,7 @@ def save_layout():
             conn.close()
 
 
+# --- DELETE Routes ---
 @app.route("/api/delete/site/<int:site_id>", methods=["DELETE"])
 def delete_site(site_id):
     conn = get_db()
@@ -207,6 +239,7 @@ def delete_rack(rack_id):
         conn.close()
 
 
+# --- React fallback ---
 @app.errorhandler(404)
 def not_found(e):
     return send_from_directory(app.static_folder, "index.html")
