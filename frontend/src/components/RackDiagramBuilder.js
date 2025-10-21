@@ -212,8 +212,12 @@ export default function RackDiagramBuilder() {
                 alert("Save failed: " + (json.error || JSON.stringify(json)));
                 return;
             }
-            handleLoadData();
+            setSites([]);
+            setRackData({});
+            setRackNames({});
+            await handleLoadData();
             alert("Save successful ✅");
+
         } catch (err) {
             alert("Save error: " + err.message);
         }

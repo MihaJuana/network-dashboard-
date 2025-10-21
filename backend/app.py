@@ -27,12 +27,13 @@ def init_db():
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sites (
-            id BIGINT PRIMARY KEY,
-            location VARCHAR(255),
-            floor VARCHAR(50)
-        )
+    CREATE TABLE IF NOT EXISTS sites (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        location VARCHAR(255),
+        floor VARCHAR(50)
+    )
     """)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS racks (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -144,6 +145,12 @@ def save_layout():
             cursor.execute("SELECT id FROM sites WHERE id=%s", (site_id,))
             existing = cursor.fetchone()
 
+            if site_id:
+                cursor.execute("SELECT id FROM sites WHERE id=%s", (site_id,))
+                existing = cursor.fetchone()
+            else:
+                existing = None
+
             if existing:
                 cursor.execute("""
                     UPDATE sites SET location=%s, floor=%s WHERE id=%s
@@ -151,9 +158,10 @@ def save_layout():
                 site_map[str(site_id)] = site_id
             else:
                 cursor.execute("""
-                    INSERT INTO sites (id, location, floor) VALUES (%s, %s, %s)
-                """, (site_id, location, floor))
-                site_map[str(site_id)] = site_id
+                    INSERT INTO sites (location, floor) VALUES (%s, %s)
+                """, (location, floor))
+                new_id = cursor.lastrowid
+                site_map[str(site_id or new_id)] = new_id
 
         # --- UPSERT for racks + equipment ---
         for site_id, racks in rackData.items():
