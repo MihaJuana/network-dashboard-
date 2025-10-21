@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const API_URL = "http://127.0.0.1:5000";
+const API_URL = "/api";
 
 export default function RackDiagramBuilder() {
     const [sites, setSites] = useState([]);
