@@ -5,12 +5,13 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 # --- Flask setup ---
-app = Flask(__name__)
+app = Flask(__name__, static_folder="../frontend/build", static_url_path="/")
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
-
 # --- Database connection helper ---
+
+
 def get_db():
     return mysql.connector.connect(
         host="127.0.0.1",
@@ -20,8 +21,9 @@ def get_db():
         database="rackdb"
     )
 
-
 # --- Initialize database schema ---
+
+
 def init_db():
     db = get_db()
     cursor = db.cursor()
@@ -57,104 +59,13 @@ def init_db():
     db.close()
 
 
-# ✅ Ensure tables exist when Gunicorn starts
 try:
     init_db()
     app.logger.info("✅ Database schema ensured at startup")
 except Exception as e:
     app.logger.exception(f"❌ DB init failed: {e}")
 
-
-# --- API ROUTES (now all start with /api) ---
-
-@app.route("/api/save", methods=["POST"])
-def save_layout():
-    import traceback
-    conn = None
-    cursor = None
-    try:
-        data = request.get_json()
-        sites = data.get("sites", [])
-        rackData = data.get("rackData", {})
-        rackNames = data.get("rackNames", {})
-
-        conn = get_db()
-        cursor = conn.cursor()
-        conn.autocommit = False
-
-        site_map = {}
-        # --- Sites ---
-        for site in sites:
-            location = site.get("location", "")
-            floor = site.get("floor", "")
-            site_id = site.get("id")
-
-            if site_id and isinstance(site_id, int):
-                cursor.execute(
-                    "SELECT id FROM sites WHERE id = %s", (site_id,))
-                if cursor.fetchone():
-                    cursor.execute(
-                        "UPDATE sites SET location=%s, floor=%s WHERE id=%s",
-                        (location, floor, site_id),
-                    )
-                    site_map[str(site_id)] = site_id
-                else:
-                    cursor.execute(
-                        "INSERT INTO sites (location, floor) VALUES (%s, %s)",
-                        (location, floor),
-                    )
-                    site_map[str(site_id)] = cursor.lastrowid
-            else:
-                cursor.execute(
-                    "INSERT INTO sites (location, floor) VALUES (%s, %s)",
-                    (location, floor),
-                )
-                site_map[str(site_id)] = cursor.lastrowid
-
-        # --- Racks + Equipment ---
-        for site_id, racks in rackData.items():
-            db_site_id = site_map.get(str(site_id))
-            if not db_site_id:
-                continue
-
-            for rack_id, rack in racks.items():
-                rack_name = rackNames.get(rack_id, f"Rack_{rack_id}")
-                rack_size = rack.get("size", 42)
-                cursor.execute(
-                    "INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)",
-                    (db_site_id, rack_name, rack_size),
-                )
-                db_rack_id = cursor.lastrowid
-
-                cursor.execute(
-                    "DELETE FROM equipment WHERE rack_id = %s", (db_rack_id,))
-                for slot_index, slot in enumerate(rack.get("slots", [])):
-                    if slot and not slot.get("occupied"):
-                        cursor.execute(
-                            """INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
-                               VALUES (%s, %s, %s, %s, %s)""",
-                            (
-                                db_rack_id,
-                                slot_index + 1,
-                                slot.get("type", ""),
-                                slot.get("text", ""),
-                                slot.get("u", 1),
-                            ),
-                        )
-
-        conn.commit()
-        return jsonify({"message": "Save successful ✅"}), 200
-
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+# --- API ROUTES ---
 
 
 @app.route("/api/load-layout", methods=["GET"])
@@ -180,18 +91,10 @@ def load_layout():
                 slots = [None] * size
 
                 cursor.execute(
-                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index", (
-                        rack_id,)
+                    "SELECT * FROM equipment WHERE rack_id=%s ORDER BY slot_index",
+                    (rack_id,),
                 )
                 equipment_list = cursor.fetchall()
-
-                max_slot_index = 0
-                for eq in equipment_list:
-                    max_slot_index = max(max_slot_index, eq["slot_index"])
-
-                if max_slot_index >= size:
-                    slots.extend([None] * (max_slot_index - size + 1))
-                    size = max_slot_index + 1
 
                 for eq in equipment_list:
                     eq_obj = {
@@ -200,11 +103,12 @@ def load_layout():
                         "u": eq["u_size"],
                         "occupied": False,
                     }
-                    slots[eq["slot_index"]] = eq_obj
-                    for i in range(1, eq["u_size"]):
-                        if eq["slot_index"] + i < len(slots):
-                            slots[eq["slot_index"] +
-                                  i] = {**eq_obj, "occupied": True}
+                    idx = eq["slot_index"] - 1
+                    if idx < len(slots):
+                        slots[idx] = eq_obj
+                        for i in range(1, eq["u_size"]):
+                            if idx + i < len(slots):
+                                slots[idx + i] = {**eq_obj, "occupied": True}
 
                 rackData[site_id][rack_id] = {"size": size, "slots": slots}
 
@@ -217,12 +121,70 @@ def load_layout():
         conn.close()
 
 
+@app.route("/api/save", methods=["POST"])
+def save_layout():
+    try:
+        data = request.get_json()
+        sites = data.get("sites", [])
+        rackData = data.get("rackData", {})
+        rackNames = data.get("rackNames", {})
+
+        conn = get_db()
+        cursor = conn.cursor()
+        conn.autocommit = False
+
+        site_map = {}
+        for site in sites:
+            location = site.get("location", "")
+            floor = site.get("floor", "")
+            cursor.execute(
+                "INSERT INTO sites (location, floor) VALUES (%s, %s)",
+                (location, floor),
+            )
+            site_map[str(site["id"])] = cursor.lastrowid
+
+        for site_id, racks in rackData.items():
+            db_site_id = site_map.get(str(site_id))
+            if not db_site_id:
+                continue
+            for rack_id, rack in racks.items():
+                rack_name = rackNames.get(rack_id, f"Rack_{rack_id}")
+                size = rack.get("size", 42)
+                cursor.execute(
+                    "INSERT INTO racks (site_id, name, size) VALUES (%s, %s, %s)",
+                    (db_site_id, rack_name, size),
+                )
+                db_rack_id = cursor.lastrowid
+
+                for i, slot in enumerate(rack.get("slots", [])):
+                    if slot and not slot.get("occupied"):
+                        cursor.execute(
+                            """INSERT INTO equipment (rack_id, slot_index, type, text, u_size)
+                               VALUES (%s, %s, %s, %s, %s)""",
+                            (db_rack_id, i + 1,
+                             slot["type"], slot["text"], slot["u"]),
+                        )
+
+        conn.commit()
+        return jsonify({"message": "Save successful ✅"}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.exception(f"Save failed: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# Delete routes
+
+
 @app.route("/api/delete/site/<int:site_id>", methods=["DELETE"])
 def delete_site(site_id):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM sites WHERE id = %s", (site_id,))
+        cursor.execute("DELETE FROM sites WHERE id=%s", (site_id,))
         conn.commit()
         return jsonify({"message": f"Site {site_id} deleted"})
     except Exception as e:
@@ -238,7 +200,7 @@ def delete_rack(rack_id):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM racks WHERE id = %s", (rack_id,))
+        cursor.execute("DELETE FROM racks WHERE id=%s", (rack_id,))
         conn.commit()
         return jsonify({"message": f"Rack {rack_id} deleted"})
     except Exception as e:
@@ -254,7 +216,7 @@ def delete_equipment(eq_id):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM equipment WHERE id = %s", (eq_id,))
+        cursor.execute("DELETE FROM equipment WHERE id=%s", (eq_id,))
         conn.commit()
         return jsonify({"message": f"Equipment {eq_id} deleted"})
     except Exception as e:
@@ -264,18 +226,13 @@ def delete_equipment(eq_id):
         cursor.close()
         conn.close()
 
-
-# --- React SPA Catch-All ---
-@app.route("/")
-@app.route("/<path:path>")
-def serve_react(path=None):
-    build_dir = os.path.join(os.path.dirname(__file__), "../frontend/build")
-    if path and os.path.exists(os.path.join(build_dir, path)):
-        return send_from_directory(build_dir, path)
-    return send_from_directory(build_dir, "index.html")
+# React Catch-All
 
 
-# --- Entry Point ---
+@app.errorhandler(404)
+def not_found(e):
+    return send_from_directory(app.static_folder, "index.html")
+
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
