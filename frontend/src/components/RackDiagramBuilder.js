@@ -33,11 +33,11 @@ export default function RackDiagramBuilder() {
     const UNIT_HEIGHT = 30;
 
     const addSite = () => {
-        const newSite = { id: Date.now(), location: "", floor: "" };
+        const newSite = { id: null, location: "", floor: "" };
         setSites((prev) => [...prev, newSite]);
-        setRackData((prev) => ({ ...prev, [newSite.id]: {} }));
-        setSiteRackSizes((prev) => ({ ...prev, [newSite.id]: DEFAULT_RACK_SIZE }));
+        setRackData((prev) => ({ ...prev, [newSite.id || "temp_" + Date.now()]: {} }));
     };
+
 
     const deleteSite = async (siteId) => {
         if (!window.confirm("Are you sure you want to delete this site?")) return;
@@ -201,8 +201,6 @@ export default function RackDiagramBuilder() {
             });
 
             const payload = { sites, rackData: validRackData, rackNames };
-            console.log("Payload sent:", payload);
-
             const res = await fetch(`${API_URL}/save`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -215,7 +213,7 @@ export default function RackDiagramBuilder() {
                 return;
             }
 
-            // ✅ Step 1: Replace fake IDs with real DB IDs
+            // ✅ Update local site IDs using backend mappings
             if (json.site_map) {
                 const idMap = json.site_map;
                 const updatedSites = sites.map((s) => ({
@@ -233,7 +231,7 @@ export default function RackDiagramBuilder() {
                 setRackData(updatedRackData);
             }
 
-            // ✅ Step 2: Clear and reload for consistency
+            // ✅ Clear stale data and reload from backend
             setSites([]);
             setRackData({});
             setRackNames({});
@@ -244,6 +242,7 @@ export default function RackDiagramBuilder() {
             alert("Save error: " + err.message);
         }
     };
+
 
     const handleLoadData = async () => {
         try {

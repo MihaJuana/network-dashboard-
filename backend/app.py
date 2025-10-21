@@ -117,7 +117,7 @@ def load_layout():
 
 
 # ✅ Save layout (UPSERT — prevents duplicates)
-# @app.route("/api/save", methods=["POST", "OPTIONS"])
+@app.route("/api/save", methods=["POST", "OPTIONS"])
 @app.route("/api/save/", methods=["POST", "OPTIONS"])
 def save_layout():
     if request.method == "OPTIONS":
@@ -139,29 +139,26 @@ def save_layout():
         # --- UPSERT for sites ---
         for site in sites:
             site_id = site.get("id")
-            location = site.get("location", "")
-            floor = site.get("floor", "")
+            location = site.get("location", "").strip()
+            floor = site.get("floor", "").strip()
 
-            cursor.execute("SELECT id FROM sites WHERE id=%s", (site_id,))
+            # ✅ Match by location (and floor)
+            cursor.execute(
+                "SELECT id FROM sites WHERE location=%s AND floor=%s", (location, floor))
             existing = cursor.fetchone()
 
-            if site_id:
-                cursor.execute("SELECT id FROM sites WHERE id=%s", (site_id,))
-                existing = cursor.fetchone()
-            else:
-                existing = None
-
             if existing:
+                db_site_id = existing[0]
                 cursor.execute("""
                     UPDATE sites SET location=%s, floor=%s WHERE id=%s
-                """, (location, floor, site_id))
-                site_map[str(site_id)] = site_id
+                """, (location, floor, db_site_id))
+                site_map[str(site_id)] = db_site_id
             else:
                 cursor.execute("""
                     INSERT INTO sites (location, floor) VALUES (%s, %s)
                 """, (location, floor))
                 new_id = cursor.lastrowid
-                site_map[str(site_id or new_id)] = new_id
+                site_map[str(site_id)] = new_id
 
         # --- UPSERT for racks + equipment ---
         for site_id, racks in rackData.items():
@@ -173,18 +170,17 @@ def save_layout():
                 rack_name = rackNames.get(rack_id, f"Rack_{rack_id}")
                 size = rack.get("size", 42)
 
-                # Check if rack exists
+                # Match rack by name + site_id
                 cursor.execute("""
                     SELECT id FROM racks WHERE site_id=%s AND name=%s
                 """, (db_site_id, rack_name))
-                existing = cursor.fetchone()
+                existing_rack = cursor.fetchone()
 
-                if existing:
-                    db_rack_id = existing[0]
+                if existing_rack:
+                    db_rack_id = existing_rack[0]
                     cursor.execute("""
                         UPDATE racks SET size=%s WHERE id=%s
                     """, (size, db_rack_id))
-                    # Clear existing equipment to refresh layout
                     cursor.execute(
                         "DELETE FROM equipment WHERE rack_id=%s", (db_rack_id,))
                 else:
@@ -193,7 +189,7 @@ def save_layout():
                     """, (db_site_id, rack_name, size))
                     db_rack_id = cursor.lastrowid
 
-                # Insert all equipment for this rack
+                # Reinsert equipment
                 for i, slot in enumerate(rack.get("slots", [])):
                     if slot and not slot.get("occupied"):
                         cursor.execute("""
@@ -204,7 +200,7 @@ def save_layout():
         conn.commit()
         return jsonify({
             "message": "Save successful ✅",
-            "site_map": site_map  # Send back new site_id mappings
+            "site_map": site_map
         }), 200
 
     except Exception as e:
