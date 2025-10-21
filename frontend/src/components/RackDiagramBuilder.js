@@ -285,7 +285,7 @@ export default function RackDiagramBuilder() {
     return (
         <div style={styles.layout}>
             <aside style={styles.equipmentPanel}>
-                <h2 style={styles.panelTitle}>🛠️ Equipment Library</h2>
+                <h2 style={styles.panelTitle}>🛠️ Equipment Library TESTING PUSH</h2>
                 {equipmentLibrary.map((item, idx) => (
                     <div
                         key={idx}
