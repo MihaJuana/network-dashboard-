@@ -117,7 +117,7 @@ def load_layout():
 
 
 # ✅ Save layout (UPSERT — prevents duplicates)
-@app.route("/api/save", methods=["POST", "OPTIONS"])
+# @app.route("/api/save", methods=["POST", "OPTIONS"])
 @app.route("/api/save/", methods=["POST", "OPTIONS"])
 def save_layout():
     if request.method == "OPTIONS":
