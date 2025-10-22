@@ -26,16 +26,54 @@ export default function RackDiagramBuilder() {
         { type: "storage", text: "💾 Storage Array (3U)", u: 3 },
         { type: "ups", text: "🔋 UPS (4U)", u: 4 },
         { type: "patchpanel", text: "🔗 Patch Panel (2U)", u: 2 },
+        { type: "loadbalancer", text: "⚖️ Load Balancer (1U)", u: 1 },
+        { type: "nas", text: "📦 NAS (2U)", u: 2 },
+        { type: "kvm", text: "⌨️ KVM Switch (1U)", u: 1 },
+        { type: "pdu", text: "🔌 PDU (1U)", u: 1 },
+        { type: "modem", text: "📡 Modem (1U)", u: 1 },
+        { type: "rackcooler", text: "❄️ Rack Cooler (2U)", u: 2 },
+        { type: "mediaserver", text: "▶️ Media Server (2U)", u: 2 },
+        { type: "database", text: "🗄️ Database (3U)", u: 3 },
+        { type: "voip", text: "☎️ VoIP Gateway (1U)", u: 1 },
     ];
 
     const rackOptions = [24, 36, 42, 48];
     const DEFAULT_RACK_SIZE = 42;
     const UNIT_HEIGHT = 30;
 
+    // const addSite = () => {
+    //     const newSite = { id: null, location: "", floor: "" };
+    //     setSites((prev) => [...prev, newSite]);
+    //     setRackData((prev) => ({ ...prev, [newSite.id || "temp_" + Date.now()]: {} }));
+    // };
+
+
     const addSite = () => {
-        const newSite = { id: null, location: "", floor: "" };
+        // ✅ Always generate a unique temporary ID for each new site
+        const tempId = "temp_" + Math.random().toString(36).substr(2, 9);
+
+        const newSite = { id: tempId, location: "", floor: "" };
+
+        // ✅ Add new site to the sites list
         setSites((prev) => [...prev, newSite]);
-        setRackData((prev) => ({ ...prev, [newSite.id || "temp_" + Date.now()]: {} }));
+
+        // ✅ Create a fresh empty rack set for this site
+        setRackData((prev) => ({
+            ...prev,
+            [tempId]: {},
+        }));
+
+        // ✅ Initialize default rack size for this site
+        setSiteRackSizes((prev) => ({
+            ...prev,
+            [tempId]: DEFAULT_RACK_SIZE,
+        }));
+
+        // ✅ Collapse state initialization (optional)
+        setCollapsedSites((prev) => ({
+            ...prev,
+            [tempId]: false,
+        }));
     };
 
 
@@ -285,18 +323,23 @@ export default function RackDiagramBuilder() {
     return (
         <div style={styles.layout}>
             <aside style={styles.equipmentPanel}>
-                <h2 style={styles.panelTitle}>🛠️ Equipment Library TESTING PUSH</h2>
-                {equipmentLibrary.map((item, idx) => (
-                    <div
-                        key={idx}
-                        style={styles.equipmentItem}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item)}
-                    >
-                        {item.text}
-                    </div>
-                ))}
+                <h2 style={styles.panelTitle}>🛠️ Equipment Library</h2>
+
+                {/* ✅ Scrollable container */}
+                <div style={styles.equipmentScrollContainer}>
+                    {equipmentLibrary.map((item, idx) => (
+                        <div
+                            key={idx}
+                            style={styles.equipmentItem}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item)}
+                        >
+                            {item.text}
+                        </div>
+                    ))}
+                </div>
             </aside>
+
 
             <main style={styles.workspace}>
                 <div style={styles.header}>
@@ -522,41 +565,80 @@ const styles = {
     },
 
     equipmentPanel: {
-        width: "180px",
+        position: "sticky", // ✅ changed to sticky
+        top: 120, // 👈 adjust this if your top navbar/header height differs
+        left: 30, // 👈 keep it aligned exactly like your screenshot
+        width: "220px",
+        height: "calc(100vh - 140px)", // 👈 makes it full height but below the header
         background: "linear-gradient(135deg, #667eea, #764ba2)",
         color: "#fff",
         padding: "20px",
-        overflowY: "auto",
         boxShadow: "2px 0 8px rgba(0,0,0,0.1)",
+        borderRadius: "8px",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 999,
     },
 
     panelTitle: {
-        fontSize: "1.4rem",
-        fontWeight: "bold",
-        marginBottom: "20px",
+        fontSize: "1.3rem",
+        fontWeight: "700",
         textAlign: "center",
-        borderBottom: "1px solid rgba(255,255,255,0.2)",
-        paddingBottom: "10px",
+        marginBottom: "15px",
+        borderBottom: "1px solid rgba(255,255,255,0.3)",
+        paddingBottom: "8px",
+        userSelect: "none",
     },
 
-    equipmentItem: {
-        background: "rgba(255,255,255,0.1)",
-        marginBottom: "10px",
-        padding: "12px",
-        borderRadius: "8px",
-        cursor: "grab",
-        fontSize: "0.9rem",
-        border: "1px solid rgba(255,255,255,0.15)",
+    // ✅ Scrollable inner section — equipment list only scrolls, not the header
+    equipmentScrollContainer: {
+        flex: 1,
+        overflowY: "auto",
+        overflowX: "hidden",
+        paddingRight: "5px",
+        scrollbarWidth: "thin",
+        scrollbarColor: "rgba(255,255,255,0.4) transparent",
+    },
+
+    // ✅ Custom scrollbar styling (for Webkit browsers)
+    "@global::-webkit-scrollbar": {
+        width: "8px",
+    },
+    "@global::-webkit-scrollbar-track": {
+        background: "transparent",
+    },
+    "@global::-webkit-scrollbar-thumb": {
+        background: "rgba(255,255,255,0.4)",
+        borderRadius: "10px",
         transition: "background 0.2s",
+    },
+    "@global::-webkit-scrollbar-thumb:hover": {
+        background: "rgba(255,255,255,0.6)",
+    },
+
+
+    equipmentItem: {
+        background: "rgba(255,255,255,0.15)",
+        border: "1px solid rgba(255,255,255,0.25)",
+        borderRadius: "8px",
+        padding: "10px",
+        marginBottom: "10px",
+        color: "#fff",
+        fontSize: "0.9rem",
         display: "flex",
         alignItems: "center",
+        cursor: "grab",
+        transition: "background 0.2s ease",
+        userSelect: "none",
     },
 
     workspace: {
         flex: 1,
         padding: "25px",
+        marginLeft: "280px", // ✅ unchanged — keeps same layout position
         overflowY: "auto",
     },
+
 
     header: {
         display: "flex",

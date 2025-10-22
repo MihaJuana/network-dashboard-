@@ -214,8 +214,8 @@ export default function PatchPanelManager() {
                                             setActivePanelId(site.panels[0].id);
                                         }}
                                         className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${activeSiteId === site.id
-                                                ? 'bg-purple-500 text-white'
-                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                            ? 'bg-purple-500 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                             }`}
                                     >
                                         <Building2 size={16} />
@@ -288,8 +288,8 @@ export default function PatchPanelManager() {
                                     <button
                                         onClick={() => setActivePanelId(panel.id)}
                                         className={`px-4 py-2 rounded-lg transition ${activePanelId === panel.id
-                                                ? 'bg-blue-500 text-white'
-                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                             }`}
                                     >
                                         <input
@@ -460,7 +460,7 @@ export default function PatchPanelManager() {
                             {Array.from({ length: totalPorts }, (_, i) => {
                                 const portNum = i + 1;
                                 const label = labels.find(l => l.port === portNum);
-                                const row = Math.floor(i / 12);
+                                const row = Math.floor(i / 48);
 
                                 return (
                                     <div key={i} className="flex flex-col items-center">
