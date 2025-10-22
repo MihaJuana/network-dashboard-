@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GripVertical, Plus, X, Save, Download, Upload, Trash2, Building2 } from 'lucide-react';
 
-export default function PatchPanelLabelManager() {
+export default function PatchPanelManager() {
     const [sites, setSites] = useState([
         {
             id: 1,
@@ -12,9 +12,9 @@ export default function PatchPanelLabelManager() {
                     name: 'Patch Panel 1',
                     totalPorts: 48,
                     labels: [
-                        // { id: 1, port: 1, label: 'Server Room A', color: '#3b82f6' },
-                        // { id: 2, port: 5, label: 'Office Floor 1', color: '#10b981' },
-                        // { id: 3, port: 12, label: 'Conference Room', color: '#f59e0b' }
+                        { id: 1, port: 1, label: 'Server Room A', color: '#3b82f6' },
+                        { id: 2, port: 5, label: 'Office Floor 1', color: '#10b981' },
+                        { id: 3, port: 12, label: 'Conference Room', color: '#f59e0b' }
                     ]
                 }
             ]
@@ -214,8 +214,8 @@ export default function PatchPanelLabelManager() {
                                             setActivePanelId(site.panels[0].id);
                                         }}
                                         className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${activeSiteId === site.id
-                                            ? 'bg-purple-500 text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                                ? 'bg-purple-500 text-white'
+                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                             }`}
                                     >
                                         <Building2 size={16} />
@@ -288,8 +288,8 @@ export default function PatchPanelLabelManager() {
                                     <button
                                         onClick={() => setActivePanelId(panel.id)}
                                         className={`px-4 py-2 rounded-lg transition ${activePanelId === panel.id
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                             }`}
                                     >
                                         <input
@@ -451,32 +451,42 @@ export default function PatchPanelLabelManager() {
                 </div>
 
                 {/* Visual Patch Panel */}
-                <div className="bg-gray-800 rounded-lg shadow-2xl p-6">
-                    <h2 className="text-xl font-bold text-white mb-2">{activeSite?.name} - {activePanel?.name}</h2>
-                    <div className="text-sm text-gray-400 mb-4">Visual Display</div>
-                    <div className="grid grid-cols-8 gap-2">
-                        {Array.from({ length: totalPorts }, (_, i) => {
-                            const portNum = i + 1;
-                            const label = labels.find(l => l.port === portNum);
-                            return (
-                                <div
-                                    key={i}
-                                    className="aspect-square rounded flex flex-col items-center justify-center text-xs"
-                                    style={{
-                                        backgroundColor: label ? label.color : '#374151',
-                                        opacity: label ? 1 : 0.5
-                                    }}
-                                    title={label ? label.label : `Port ${portNum}`}
-                                >
-                                    <div className="text-white font-bold">{portNum}</div>
-                                    {label && (
-                                        <div className="text-white text-[8px] truncate w-full text-center px-1">
-                                            {label.label}
+                <div className="bg-gray-600 rounded-lg shadow-2xl p-6">
+                    <div className="bg-blue-400 text-gray-800 font-bold text-center py-2 mb-4 rounded">
+                        {activePanel?.name || 'PANEL1'}
+                    </div>
+                    <div className="bg-gray-800 p-4 rounded">
+                        <div className="grid grid-cols-12 gap-1">
+                            {Array.from({ length: totalPorts }, (_, i) => {
+                                const portNum = i + 1;
+                                const label = labels.find(l => l.port === portNum);
+                                const row = Math.floor(i / 12);
+
+                                return (
+                                    <div key={i} className="flex flex-col items-center">
+                                        {/* Port number on top for first row, bottom for second row */}
+                                        {row === 0 && (
+                                            <div className="text-white text-[10px] font-bold mb-1">{portNum}</div>
+                                        )}
+                                        <div
+                                            className="w-full aspect-[3/2] rounded flex items-center justify-center text-[9px] font-bold border border-gray-700"
+                                            style={{
+                                                backgroundColor: label ? label.color : '#4b5563',
+                                                color: label ? 'white' : '#9ca3af'
+                                            }}
+                                            title={label ? `Port ${portNum}: ${label.label}` : `Port ${portNum}`}
+                                        >
+                                            <div className="truncate px-1 text-center">
+                                                {label ? label.label : ''}
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                        {row === 1 && (
+                                            <div className="text-white text-[10px] font-bold mt-1">{portNum}</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
