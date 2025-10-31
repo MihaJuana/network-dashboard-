@@ -12,7 +12,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build"
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+     "dev:api": "cd ../backend && node setup_backend.js",
+  "dev:all": "cross-env PYTHONUNBUFFERED=1 concurrently -n \"API,UI\" -c \"green,blue\" \"npm run dev:api\" \"npm start\""
   },
   "browserslist": {
     "production": [
@@ -27,6 +29,8 @@
     ]
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "tailwindcss": "^3.4.18"
   }
 }

@@ -78,39 +78,35 @@ export default function RackDiagramBuilder() {
 
 
     const deleteSite = async (siteId) => {
-        if (!window.confirm("Are you sure you want to delete this site?")) return;
-        try {
-            const res = await fetch(`${API_URL}/delete/site/${siteId}`, {
-                method: "DELETE",
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.error || "Delete failed");
-            setSites((prev) => prev.filter((s) => s.id !== siteId));
-            setRackData((prev) => {
-                const copy = { ...prev };
-                delete copy[siteId];
-                return copy;
-            });
-            setRackNames((prev) => {
-                const copy = { ...prev };
-                Object.keys(rackData[siteId] || {}).forEach((id) => delete copy[id]);
-                return copy;
-            });
-            setCollapsedSites((prev) => {
-                const copy = { ...prev };
-                delete copy[siteId];
-                return copy;
-            });
-            setSiteRackSizes((prev) => {
-                const copy = { ...prev };
-                delete copy[siteId];
-                return copy;
-            });
-            handleLoadData(); // Refresh data to ensure consistency
-        } catch (err) {
-            alert("Delete error: " + err.message);
-        }
-    };
+  if (String(siteId).startsWith("temp_")) {
+    // frontend-only site → just remove locally
+    setSites((prev) => prev.filter((s) => s.id !== siteId));
+    return;
+  }
+
+  if (!window.confirm("Are you sure you want to delete this site?")) return;
+
+  try {
+    const res = await fetch(`${API_URL}/delete/site/${siteId}`, { method: "DELETE" });
+    const text = await res.text();
+    let json;
+
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned invalid JSON: ${text.slice(0, 100)}`);
+    }
+
+    if (!res.ok) throw new Error(json.error || "Delete failed");
+
+    setSites((prev) => prev.filter((s) => s.id !== siteId));
+    handleLoadData();
+  } catch (err) {
+    console.error("Delete error:", err);
+    alert("Delete error: " + err.message);
+  }
+};
+
 
     const addRack = (siteId) => {
         const size = siteRackSizes[siteId] || DEFAULT_RACK_SIZE;
